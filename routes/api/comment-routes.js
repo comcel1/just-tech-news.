@@ -24,17 +24,17 @@ router.post('/', (req, res) => {
 });
 
 router.delete('/:id', (req, res) => {
-  Post.destroy({
+  Comment.destroy({
     where: {
       id: req.params.id,
     },
   })
-    .then((dbPostData) => {
-      if (!dbPostData) {
-        res.status(404).json({ message: 'No post found with this id' });
+    .then((dbCommentData) => {
+      if (!dbCommentData) {
+        res.status(404).json({ message: 'No comment found with this id' });
         return;
       }
-      res.json(dbPostData);
+      res.json(dbCommentData);
     })
     .catch((err) => {
       console.log(err);
