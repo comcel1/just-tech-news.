@@ -31,9 +31,6 @@ Comment.init(
         model: 'post',
         key: 'id',
       },
-
-      // columns will go here
-      // comment_text,
     },
   },
   {

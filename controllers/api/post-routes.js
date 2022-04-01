@@ -1,11 +1,11 @@
 const router = require('express').Router();
 const sequelize = require('../../config/connection');
-const { Post, User, Vote, Comment } = require('../../models');
+const { Post, User, Comment, Vote } = require('../../models');
 
 // get all users
 router.get('/', (req, res) => {
+  console.log('======================');
   Post.findAll({
-    order: [['created_at', 'DESC']],
     attributes: [
       'id',
       'post_url',
@@ -19,7 +19,6 @@ router.get('/', (req, res) => {
       ],
     ],
     include: [
-      // include the Comment model here:
       {
         model: Comment,
         attributes: ['id', 'comment_text', 'post_id', 'user_id', 'created_at'],
@@ -34,61 +33,64 @@ router.get('/', (req, res) => {
       },
     ],
   })
-    .then((data) => res.json(data))
+    .then((dbPostData) => res.json(dbPostData))
     .catch((err) => {
       console.log(err);
-      res.status(400).json(err);
+      res.status(500).json(err);
     });
 });
 
-// get one user
 router.get('/:id', (req, res) => {
-  User.findOne({
-    attributes: { exclude: ['password'] },
+  Post.findOne({
     where: {
       id: req.params.id,
     },
+    attributes: [
+      'id',
+      'post_url',
+      'title',
+      'created_at',
+      [
+        sequelize.literal(
+          '(SELECT COUNT(*) FROM vote WHERE post.id = vote.post_id)'
+        ),
+        'vote_count',
+      ],
+    ],
     include: [
       {
-        model: Post,
-        attributes: ['id', 'title', 'post_url', 'created_at'],
-      },
-      // include the Comment model here:
-      {
         model: Comment,
-        attributes: ['id', 'comment_text', 'created_at'],
+        attributes: ['id', 'comment_text', 'post_id', 'user_id', 'created_at'],
         include: {
-          model: Post,
-          attributes: ['title'],
+          model: User,
+          attributes: ['username'],
         },
       },
       {
-        model: Post,
-        attributes: ['title'],
-        through: Vote,
-        as: 'voted_posts',
+        model: User,
+        attributes: ['username'],
       },
     ],
   })
-    .then((data) => {
-      if (!data) {
-        res.status(404).json({ message: 'No user found with this id' });
+    .then((dbPostData) => {
+      if (!dbPostData) {
+        res.status(404).json({ message: 'No post found with this id' });
+        return;
       }
-      res.json(data);
+      res.json(dbPostData);
     })
     .catch((err) => {
       console.log(err);
-      res.status(400).json(err);
+      res.status(500).json(err);
     });
 });
 
-// create a new post (POST ROUTE, no pun intended!)
 router.post('/', (req, res) => {
   // expects {title: 'Taskmaster goes public!', post_url: 'https://taskmaster.com/press', user_id: 1}
   Post.create({
     title: req.body.title,
     post_url: req.body.post_url,
-    user_id: req.body.user_id,
+    user_id: req.session.user_id,
   })
     .then((dbPostData) => res.json(dbPostData))
     .catch((err) => {
@@ -97,19 +99,19 @@ router.post('/', (req, res) => {
     });
 });
 
-// PUT /api/posts/upvote
-// Make sure this PUT route is defined before the /:id PUT route, though. Otherwise, Express.js will think the word "upvote" is a valid parameter for /:id.
 router.put('/upvote', (req, res) => {
   // custom static method created in models/Post.js
-  Post.upvote(req.body, { Vote })
-    .then((updatedPostData) => res.json(updatedPostData))
+  Post.upvote(
+    { ...req.body, user_id: req.session.user_id },
+    { Vote, Comment, User }
+  )
+    .then((updatedVoteData) => res.json(updatedVoteData))
     .catch((err) => {
       console.log(err);
-      res.status(400).json(err);
+      res.status(500).json(err);
     });
 });
 
-// user put route (update post)
 router.put('/:id', (req, res) => {
   Post.update(
     {
@@ -134,8 +136,8 @@ router.put('/:id', (req, res) => {
     });
 });
 
-// delete post
 router.delete('/:id', (req, res) => {
+  console.log('id', req.params.id);
   Post.destroy({
     where: {
       id: req.params.id,
